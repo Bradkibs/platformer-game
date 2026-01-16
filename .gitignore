@@ -9,3 +9,4 @@ wheels/
 .idea
 # Virtual environments
 .venv
+gameVenv
