@@ -1,5 +1,3 @@
-Here is the updated `README.md` reflecting the new Character Selection feature and dynamic asset loading.
-
 ---
 
 # Adventures of the Platformer Game
