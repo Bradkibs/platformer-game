@@ -1,5 +1,5 @@
 """
-Platfrormer game in python using arcade library
+Platformer game in python using arcade library
 Author: Bradley Kibwana
 """
 import arcade
@@ -9,7 +9,7 @@ import random
 # --- Constants & Configuration ---
 WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 720
-WINDOW_TITLE = "Adventure of the Platformer"
+WINDOW_TITLE = "Adventures of the Platformer"
 TILE_SCALING = 0.5
 COIN_SCALING = 0.5
 PLAYER_MOVEMENT_SPEED = 5
@@ -51,6 +51,17 @@ RETRO_BUTTON_STYLE = {
     ),
 }
 
+# --- Character Options Configuration ---
+# Maps a display name to {folder_name, file_prefix}
+# Example: 'male_person' folder contains 'malePerson_idle.png'
+CHARACTERS = [
+    {"name": "Male", "path": "male_person", "prefix": "malePerson"},
+    {"name": "Female", "path": "female_person", "prefix": "femalePerson"},
+    {"name": "Zombie", "path": "zombie", "prefix": "zombie"},
+    {"name": "Robot", "path": "robot", "prefix": "robot"},
+    {"name": "Adventurer", "path": "female_adventurer", "prefix": "femaleAdventurer"},
+]
+
 class SubMenu(arcade.gui.UIMouseFilterMixin, arcade.gui.UIAnchorLayout):
     def __init__(self, title):
         super().__init__(size_hint=(1, 1))
@@ -75,31 +86,60 @@ class SubMenu(arcade.gui.UIMouseFilterMixin, arcade.gui.UIAnchorLayout):
 
 
 class MenuView(arcade.View):
-    def __init__(self, main_view):
+    def __init__(self, main_view=None):
         super().__init__()
         self.main_view = main_view
         self.manager = arcade.gui.UIManager()
-        self.grid = arcade.gui.UIGridLayout(column_count=2, row_count=3, horizontal_spacing=20, vertical_spacing=20)
 
+        # State for character selection
+        self.char_index = 0
+
+        self.grid = arcade.gui.UIGridLayout(column_count=2, row_count=4, horizontal_spacing=20, vertical_spacing=20)
+
+        # Buttons
         resume_btn = arcade.gui.UIFlatButton(text="Resume", width=200, style=RETRO_BUTTON_STYLE)
         start_new_btn = arcade.gui.UIFlatButton(text="New Game", width=200, style=RETRO_BUTTON_STYLE)
+
+        # Character Toggle Button
+        self.char_btn = arcade.gui.UIFlatButton(
+            text=f"Char: {CHARACTERS[self.char_index]['name']}",
+            width=420,
+            style=RETRO_BUTTON_STYLE
+        )
+
         exit_btn = arcade.gui.UIFlatButton(text="Exit", width=420, style=RETRO_BUTTON_STYLE)
 
+        # Add to Grid
         self.grid.add(resume_btn, column=0, row=0)
         self.grid.add(start_new_btn, column=1, row=0)
+        self.grid.add(self.char_btn, column=0, row=1, column_span=2)
         self.grid.add(exit_btn, column=0, row=2, column_span=2)
+
         self.anchor = self.manager.add(arcade.gui.UIAnchorLayout())
         self.anchor.add(anchor_x="center_x", anchor_y="center_y", child=self.grid)
 
+        # --- Events ---
+
         @resume_btn.event("on_click")
         def on_click_resume_button(event):
-            self.window.show_view(self.main_view)
+            if self.main_view:
+                self.window.show_view(self.main_view)
 
         @start_new_btn.event("on_click")
         def on_click_start_new_game_button(event):
-            game_view = GameView()
+            # Pass the currently selected character data to the GameView
+            selected_char = CHARACTERS[self.char_index]
+            game_view = GameView(character_data=selected_char)
             game_view.setup()
             self.window.show_view(game_view)
+
+        @self.char_btn.event("on_click")
+        def on_click_char_button(event):
+            # Cycle character index
+            self.char_index = (self.char_index + 1) % len(CHARACTERS)
+            # Update button text
+            new_name = CHARACTERS[self.char_index]['name']
+            self.char_btn.text = f"Char: {new_name}"
 
         @exit_btn.event("on_click")
         def on_click_exit_button(event):
@@ -119,14 +159,15 @@ class MenuView(arcade.View):
 
 class GameOverView(arcade.View):
     """View to show when the player loses all lives."""
-    def __init__(self):
+    def __init__(self, character_data=None):
         super().__init__()
         self.manager = arcade.gui.UIManager()
+        # Remember the character used so we can restart with them
+        self.character_data = character_data if character_data else CHARACTERS[0]
 
         # Create layout
         self.grid = arcade.gui.UIGridLayout(column_count=1, row_count=3, vertical_spacing=20)
 
-        # Title Label
         title_label = arcade.gui.UILabel(
             text="GAME OVER",
             font_name=RETRO_FONT,
@@ -135,23 +176,19 @@ class GameOverView(arcade.View):
             align="center"
         )
 
-        # Buttons
         restart_btn = arcade.gui.UIFlatButton(text="Try Again", width=250, style=RETRO_BUTTON_STYLE)
         exit_btn = arcade.gui.UIFlatButton(text="Exit", width=250, style=RETRO_BUTTON_STYLE)
 
-        # Add to grid
         self.grid.add(title_label, column=0, row=0)
         self.grid.add(restart_btn, column=0, row=1)
         self.grid.add(exit_btn, column=0, row=2)
 
-        # Anchor logic
         self.anchor = self.manager.add(arcade.gui.UIAnchorLayout())
         self.anchor.add(anchor_x="center_x", anchor_y="center_y", child=self.grid)
 
-        # Button Events
         @restart_btn.event("on_click")
         def on_restart(event):
-            game_view = GameView()
+            game_view = GameView(character_data=self.character_data)
             game_view.setup()
             self.window.show_view(game_view)
 
@@ -172,9 +209,12 @@ class GameOverView(arcade.View):
 
 
 class GameView(arcade.View):
-    def __init__(self):
+    def __init__(self, character_data=None):
         super().__init__()
         self.manager = arcade.gui.UIManager()
+
+        # Default to first character if none provided
+        self.character_data = character_data if character_data else CHARACTERS[0]
 
         pause_btn = arcade.gui.UIFlatButton(text="Pause", width=120, style=RETRO_BUTTON_STYLE)
         @pause_btn.event("on_click")
@@ -203,7 +243,6 @@ class GameView(arcade.View):
         self.level = 1
         self.reset_score = True
 
-        # --- NEW: Lives System ---
         self.lives = 3
 
         # UI Sprite List
@@ -233,14 +272,24 @@ class GameView(arcade.View):
         self.curr_gem = 0
         self.curr_check = 0
 
-        self.player_texture_idle = arcade.load_texture(":resources:/images/animated_characters/male_person/malePerson_idle.png")
-        self.player_texture_jump_right = arcade.load_texture(":resources:images/animated_characters/male_person/malePerson_jump.png")
-        self.player_texture_fall_right = arcade.load_texture(":resources:images/animated_characters/male_person/malePerson_fall.png")
+        # --- DYNAMIC TEXTURE LOADING ---
+        # Using the passed character_data to build paths
+        # Structure: :resources:/images/animated_characters/{path}/{prefix}_{action}.png
+        folder = self.character_data['path']
+        prefix = self.character_data['prefix']
+
+        base_path = f":resources:/images/animated_characters/{folder}/{prefix}"
+
+        self.player_texture_idle = arcade.load_texture(f"{base_path}_idle.png")
+        self.player_texture_jump_right = arcade.load_texture(f"{base_path}_jump.png")
+        self.player_texture_fall_right = arcade.load_texture(f"{base_path}_fall.png")
+
+        # Create mirrored versions
         self.player_texture_jump_left = self.player_texture_jump_right.flip_left_right()
         self.player_texture_fall_left = self.player_texture_fall_right.flip_left_right()
 
         for i in range(8):
-            tex = arcade.load_texture(f":resources:/images/animated_characters/male_person/malePerson_walk{i}.png")
+            tex = arcade.load_texture(f"{base_path}_walk{i}.png")
             self.walk_textures_right.append(tex)
             self.walk_textures_left.append(tex.flip_left_right())
 
@@ -419,8 +468,8 @@ class GameView(arcade.View):
             self.player_sprite.center_y = self.checkpoint_y
             self.camera.position = (self.checkpoint_x, self.checkpoint_y)
         else:
-            # SWITCH TO GAME OVER VIEW
-            game_over_view = GameOverView()
+            # SWITCH TO GAME OVER VIEW and pass current character
+            game_over_view = GameOverView(character_data=self.character_data)
             self.window.show_view(game_over_view)
 
     def on_update(self, delta_time):
@@ -531,8 +580,7 @@ class GameView(arcade.View):
 
 def main():
     window = arcade.Window(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE, resizable=True)
-    start_view = GameView()
-    start_view.setup()
+    start_view = MenuView()
     window.show_view(start_view)
     arcade.run()
 
