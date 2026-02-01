@@ -272,14 +272,15 @@ class GameView(arcade.View):
         }
 
         # Try loading the map.
-        map_name = f":resources:tiled_maps/level_{self.level}.json"
+
 
         try:
+            map_name = f":resources:tiled_maps/map2_level_{self.level}.json"
             self.tile_map = arcade.load_tilemap(map_name, TILE_SCALING, layer_options)
         except FileNotFoundError:
             print(f"Map {map_name} not found, resetting to level 1")
             self.level = 1
-            map_name = f":resources:tiled_maps/map2_level_{self.level}.json"
+            map_name = f":resources:tiled_maps/level_{self.level}.json"
             self.tile_map = arcade.load_tilemap(map_name, TILE_SCALING, layer_options)
 
         self.scene = arcade.Scene.from_tilemap(self.tile_map)
