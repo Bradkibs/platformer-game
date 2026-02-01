@@ -1,3 +1,6 @@
+"""
+Platformer Game with Views, animation and camera clamping.
+"""
 import arcade
 import arcade.gui
 from typing import List
@@ -5,14 +8,16 @@ from typing import List
 # Constants
 WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 720
-WINDOW_TITLE = "Platformer"
+WINDOW_TITLE = "Adventure of the Platformer"
 TILE_SCALING = 0.5
 PLAYER_MOVEMENT_SPEED = 5
 GRAVITY = 1
 PLAYER_JUMP_SPEED = 20
 
+
 class SubMenu(arcade.gui.UIMouseFilterMixin, arcade.gui.UIAnchorLayout):
     """Acts like a fake view/window."""
+
     def __init__(self, title, input_text, toggle_label, dropdown_options, slider_label):
         super().__init__(size_hint=(1, 1))
 
@@ -38,8 +43,10 @@ class SubMenu(arcade.gui.UIMouseFilterMixin, arcade.gui.UIAnchorLayout):
     def on_click_back_button(self, event):
         self.parent.remove(self)
 
+
 class MenuView(arcade.View):
     """View for menu screen"""
+
     def __init__(self, main_view):
         super().__init__()
         self.main_view = main_view
@@ -83,14 +90,17 @@ class MenuView(arcade.View):
         self.clear()
         self.manager.draw()
 
+
 class GameView(arcade.View):
     """Main Game Logic View"""
+
     def __init__(self):
         super().__init__()
         self.manager = arcade.gui.UIManager()
 
         # UI Pause Button
         pause_btn = arcade.gui.UIFlatButton(text="Pause Game", width=150)
+
         @pause_btn.event("on_click")
         def on_click_pause(event):
             menu_view = MenuView(self)
@@ -101,11 +111,15 @@ class GameView(arcade.View):
 
         # Game Variables
         self.player_sprite = None
-        self.physics_engine = None  # Defined here to avoid AttributeErrors
+        self.physics_engine = None
         self.scene = None
         self.tile_map = None
         self.camera = None
         self.gui_camera = None
+
+        # Map Dimensions for Camera Clipping
+        self.map_width = 0
+        self.map_height = 0
 
         # Animation
         self.walk_textures_right = []
@@ -118,13 +132,16 @@ class GameView(arcade.View):
         self.reset_score = True
 
         # Pre-load static textures
-        self.player_texture_idle = arcade.load_texture(":resources:/images/animated_characters/male_person/malePerson_idle.png")
-        self.player_texture_jump_right = arcade.load_texture(":resources:images/animated_characters/male_person/malePerson_jump.png")
-        self.player_texture_fall_right = arcade.load_texture(":resources:images/animated_characters/male_person/malePerson_fall.png")
+        self.player_texture_idle = arcade.load_texture(
+            ":resources:/images/animated_characters/male_person/malePerson_idle.png")
+        self.player_texture_jump_right = arcade.load_texture(
+            ":resources:images/animated_characters/male_person/malePerson_jump.png")
+        self.player_texture_fall_right = arcade.load_texture(
+            ":resources:images/animated_characters/male_person/malePerson_fall.png")
         self.player_texture_jump_left = self.player_texture_jump_right.flip_left_right()
         self.player_texture_fall_left = self.player_texture_fall_right.flip_left_right()
 
-        # Load walk sequence
+        # Load walk sequence efficiently
         for i in range(8):
             tex = arcade.load_texture(f":resources:/images/animated_characters/male_person/malePerson_walk{i}.png")
             self.walk_textures_right.append(tex)
@@ -136,37 +153,30 @@ class GameView(arcade.View):
 
     def setup(self):
         layer_options = {"Platforms": {"use_spatial_hash": True}}
-        self.tile_map = arcade.load_tilemap(f":resources:tiled_maps/map2_level_{self.level}.json", TILE_SCALING, layer_options)
+        self.tile_map = arcade.load_tilemap(f":resources:tiled_maps/map2_level_{self.level}.json", TILE_SCALING,
+                                            layer_options)
         self.scene = arcade.Scene.from_tilemap(self.tile_map)
+
+        # 1. Calculate Map Boundaries (in pixels)
+        self.map_width = (self.tile_map.width * self.tile_map.tile_width) * self.tile_map.scaling
+        self.map_height = (self.tile_map.height * self.tile_map.tile_height) * self.tile_map.scaling
 
         self.scene.add_sprite_list_after("Player", "Foreground")
         self.player_sprite = arcade.Sprite(self.player_texture_idle)
         self.player_sprite.center_x, self.player_sprite.center_y = 128, 128
         self.scene.add_sprite("Player", self.player_sprite)
 
-        # Fix: Physics engine initialized within View logic
         self.physics_engine = arcade.PhysicsEnginePlatformer(
             self.player_sprite, walls=self.scene["Platforms"], gravity_constant=GRAVITY
         )
 
+        # Initialize cameras without invalid attributes
+        self.camera = arcade.Camera2D()
+        self.gui_camera = arcade.Camera2D()
+
         if self.reset_score: self.score = 0
         self.reset_score = True
         self.score_text = arcade.Text(f"Score: {self.score}", x=10, y=10, font_size=18)
-
-        # Calculating the right edge of the map in pixels
-        self.end_of_map = (self.tile_map.width * self.tile_map.tile_width) * self.tile_map.scaling
-        # Calculating the top edge of the map in pixels
-        map_height = (self.tile_map.height * self.tile_map.tile_height) * self.tile_map.scaling
-
-        # Setting up the camera with boundaries (Clipping)
-        # min_x/y is the start (0,0), max_x/y is the end of the map
-        self.camera = arcade.Camera2D(
-            position=(self.player_sprite.center_x, self.player_sprite.center_y),
-
-                viewport=arcade.LBWH(0, 0, self.window.width, self.window.height),
-        )
-
-        self.gui_camera = arcade.Camera2D()
 
     def on_show_view(self):
         self.manager.enable()
@@ -188,8 +198,10 @@ class GameView(arcade.View):
             self.physics_engine.update()
 
         # Handle Animation
-        if self.player_sprite.change_x > 0: self.facing_right = True
-        elif self.player_sprite.change_x < 0: self.facing_right = False
+        if self.player_sprite.change_x > 0:
+            self.facing_right = True
+        elif self.player_sprite.change_x < 0:
+            self.facing_right = False
 
         if not self.physics_engine.can_jump():
             if self.player_sprite.change_y > 0:
@@ -199,7 +211,8 @@ class GameView(arcade.View):
         elif abs(self.player_sprite.change_x) > 0:
             self.walk_index += 0.2
             if self.walk_index >= len(self.walk_textures_right): self.walk_index = 0
-            self.player_sprite.texture = self.walk_textures_right[int(self.walk_index)] if self.facing_right else self.walk_textures_left[int(self.walk_index)]
+            self.player_sprite.texture = self.walk_textures_right[int(self.walk_index)] if self.facing_right else \
+            self.walk_textures_left[int(self.walk_index)]
         else:
             self.walk_index = 0
             self.player_sprite.texture = self.player_texture_idle
@@ -216,30 +229,57 @@ class GameView(arcade.View):
             arcade.play_sound(self.gameover_sound)
             self.setup()
 
-        if self.player_sprite.center_x >= self.end_of_map:
+        if self.player_sprite.center_x >= self.map_width:
             self.level += 1
             self.reset_score = False
             self.setup()
 
-        self.camera.position = self.player_sprite.position
+        # --- CAMERA CLIPPING LOGIC ---
+        # 1. Get the screen dimensions relative to the current camera zoom
+        screen_center_x = self.window.width / 2
+        screen_center_y = self.window.height / 2
+
+        # 2. Determine where the camera WANTS to be (the player)
+        target_x = self.player_sprite.center_x
+        target_y = self.player_sprite.center_y
+
+        # 3. Clamp X: Ensure camera doesn't show past the Left (0) or Right (map_width) edges
+        # We clamp the CENTER point. The center must be at least 'half a screen' away from the edge.
+        if target_x < screen_center_x:
+            target_x = screen_center_x
+        elif target_x > self.map_width - screen_center_x:
+            target_x = self.map_width - screen_center_x
+
+        # 4. Clamp Y: Same for Top and Bottom
+        if target_y < screen_center_y:
+            target_y = screen_center_y
+        elif target_y > self.map_height - screen_center_y:
+            target_y = self.map_height - screen_center_y
+
+        # 5. Set the camera position to the clamped coordinates
+        self.camera.position = (target_x, target_y)
 
     def on_key_press(self, key, modifiers):
         if key in [arcade.key.UP, arcade.key.W] and self.physics_engine.can_jump():
             self.player_sprite.change_y = PLAYER_JUMP_SPEED
             arcade.play_sound(self.jump_sound)
-        elif key in [arcade.key.LEFT, arcade.key.A]: self.player_sprite.change_x = -PLAYER_MOVEMENT_SPEED
-        elif key in [arcade.key.RIGHT, arcade.key.D]: self.player_sprite.change_x = PLAYER_MOVEMENT_SPEED
+        elif key in [arcade.key.LEFT, arcade.key.A]:
+            self.player_sprite.change_x = -PLAYER_MOVEMENT_SPEED
+        elif key in [arcade.key.RIGHT, arcade.key.D]:
+            self.player_sprite.change_x = PLAYER_MOVEMENT_SPEED
 
     def on_key_release(self, key, modifiers):
         if key in [arcade.key.LEFT, arcade.key.A, arcade.key.RIGHT, arcade.key.D]:
             self.player_sprite.change_x = 0
 
+
 def main():
-    window = arcade.Window(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE)
+    window = arcade.Window(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE, resizable=True)
     start_view = GameView()
     start_view.setup()
     window.show_view(start_view)
     arcade.run()
+
 
 if __name__ == "__main__":
     main()
