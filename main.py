@@ -1,8 +1,8 @@
 """
-Platformer Game: Dynamic Object Placement for All Levels.
+Platformer Game: Explosive Update (Arcade 3.0 Compatible).
 FIXES:
-1. Replaces static coordinates (x=800) with a loop that scans the whole map.
-2. Ensures obstacles and items appear in Level 2, 3, etc.
+1. Fixed 'Sprite has no attribute draw' by using a SpriteList for UI.
+2. Maintained dynamic difficulty and lives system.
 """
 import arcade
 import arcade.gui
@@ -38,7 +38,6 @@ COLOR_BTN_TEXT = arcade.color.DARK_BROWN
 arcade.load_font(':resources:/fonts/ttf/Kenney/Kenney_Pixel.ttf')
 RETRO_FONT = "Kenney Pixel"
 
-# Define the Retro Button Style
 RETRO_BUTTON_STYLE = {
     "normal": arcade.gui.UIFlatButton.UIStyle(
         font_size=24, font_name=RETRO_FONT, font_color=COLOR_BTN_TEXT,
@@ -55,7 +54,6 @@ RETRO_BUTTON_STYLE = {
 }
 
 class SubMenu(arcade.gui.UIMouseFilterMixin, arcade.gui.UIAnchorLayout):
-    """Acts like a fake view/window."""
     def __init__(self, title):
         super().__init__(size_hint=(1, 1))
         frame = self.add(arcade.gui.UIAnchorLayout(width=300, height=400, size_hint=None))
@@ -79,7 +77,6 @@ class SubMenu(arcade.gui.UIMouseFilterMixin, arcade.gui.UIAnchorLayout):
 
 
 class MenuView(arcade.View):
-    """View for menu screen"""
     def __init__(self, main_view):
         super().__init__()
         self.main_view = main_view
@@ -123,13 +120,10 @@ class MenuView(arcade.View):
 
 
 class GameView(arcade.View):
-    """Main Game Logic View"""
-
     def __init__(self):
         super().__init__()
         self.manager = arcade.gui.UIManager()
 
-        # UI Pause Button
         pause_btn = arcade.gui.UIFlatButton(text="Pause", width=120, style=RETRO_BUTTON_STYLE)
         @pause_btn.event("on_click")
         def on_click_pause(event):
@@ -139,7 +133,6 @@ class GameView(arcade.View):
         self.anchor = self.manager.add(arcade.gui.UIAnchorLayout())
         self.anchor.add(anchor_x="right", anchor_y="top", align_x=-20, align_y=-20, child=pause_btn)
 
-        # Game Variables
         self.player_sprite = None
         self.physics_engine = None
         self.scene = None
@@ -148,6 +141,7 @@ class GameView(arcade.View):
         self.gui_camera = None
 
         self.map_width = 0
+        self.map_height = 0
         self.walk_textures_right = []
         self.walk_textures_left = []
         self.walk_index = 0
@@ -157,11 +151,39 @@ class GameView(arcade.View):
         self.level = 1
         self.reset_score = True
 
-        # Checkpoint variables
+        # --- NEW: Lives System ---
+        self.lives = 3
+
+        # FIX: Created a dedicated SpriteList for UI elements
+        self.ui_list = arcade.SpriteList()
+
+        self.heart_sprite = arcade.Sprite(":resources:images/items/gemRed.png")
+        self.heart_sprite.width = 30
+        self.heart_sprite.height = 30
+        self.heart_sprite.center_x = 30
+        self.heart_sprite.center_y = WINDOW_HEIGHT - 30
+
+        # Add the sprite to the list
+        self.ui_list.append(self.heart_sprite)
+
         self.checkpoint_x = 128
         self.checkpoint_y = 128
 
-        # Pre-load textures
+        # --- LEVEL CONFIGURATION ---
+        self.LEVEL = 1
+
+        self.BASE_CRATE = 20
+        self.BASE_COIN = 15
+        self.BASE_BOMB = 10
+        self.BASE_GEM = 5
+        self.BASE_CHECK = 5
+
+        self.curr_crate = 0
+        self.curr_coin = 0
+        self.curr_bomb = 0
+        self.curr_gem = 0
+        self.curr_check = 0
+
         self.player_texture_idle = arcade.load_texture(":resources:/images/animated_characters/male_person/malePerson_idle.png")
         self.player_texture_jump_right = arcade.load_texture(":resources:images/animated_characters/male_person/malePerson_jump.png")
         self.player_texture_fall_right = arcade.load_texture(":resources:images/animated_characters/male_person/malePerson_fall.png")
@@ -173,7 +195,6 @@ class GameView(arcade.View):
             self.walk_textures_right.append(tex)
             self.walk_textures_left.append(tex.flip_left_right())
 
-        # Sounds
         self.collect_coin_sound = arcade.load_sound(":resources:sounds/coin1.wav")
         self.collect_gem_sound = arcade.load_sound(":resources:sounds/coin2.wav")
         self.collect_key_sound = arcade.load_sound(":resources:sounds/secret2.wav")
@@ -181,11 +202,7 @@ class GameView(arcade.View):
         self.gameover_sound = arcade.load_sound(":resources:sounds/gameover1.wav")
 
     def get_ground_y(self, x_pos):
-        """
-        Calculates the Y height of the ground at a specific X coordinate.
-        """
-        ground_y = -100 # Default to below screen if nothing found
-
+        ground_y = -100
         if "Platforms" in self.scene:
             for tile in self.scene["Platforms"]:
                 if tile.left < x_pos < tile.right:
@@ -194,35 +211,29 @@ class GameView(arcade.View):
         return ground_y
 
     def place_dynamic_objects(self):
-        """
-        Scans the entire level map and places objects (Crates, Coins, Gems)
-        dynamically based on available ground, rather than fixed coordinates.
-        """
-        # Start scanning after the start area (300px) and stop before the end (200px)
-        # We step every 300 pixels to spread things out.
         scan_step = 300
 
+        limit_crate = self.curr_crate
+        limit_coin = limit_crate + self.curr_coin
+        limit_bomb = limit_coin + self.curr_bomb
+        limit_gem = limit_bomb + self.curr_gem
+        limit_check = limit_gem + self.curr_check
+
+        print(f"Level {self.LEVEL} Stats | Bombs: {self.curr_bomb}% | Crate: {self.curr_crate}%")
+
         for x_coord in range(400, int(self.map_width - 200), scan_step):
-
-            # Add some randomness to the step so it doesn't look like a grid
             actual_x = x_coord + random.randint(-50, 50)
-
-            # Find the ground height at this spot
             ground_y = self.get_ground_y(actual_x)
 
-            # If we found a pit (ground is too low), skip this spot
             if ground_y < 0:
                 continue
 
-            # --- DECISION: WHAT TO PLACE HERE? ---
             roll = random.randint(1, 100)
 
-            # 30% Chance: Crate Stack with Silver Coins
-            if roll <= 30:
+            # 1. Crates
+            if roll <= limit_crate:
                 previous_box = None
-                # Create stack of 1 to 3 crates
                 stack_height = random.randint(1, 3)
-
                 for i in range(stack_height):
                     crate = arcade.Sprite(":resources:images/tiles/boxCrate_double.png", TILE_SCALING)
                     crate.center_x = actual_x
@@ -233,52 +244,56 @@ class GameView(arcade.View):
                     self.scene.add_sprite("Obstacles", crate)
                     previous_box = crate
 
-                # Place silver coin on top
                 coin = arcade.Sprite(":resources:/images/items/coinSilver.png", COIN_SCALING)
                 coin.center_x = actual_x
                 coin.bottom = previous_box.top + 10
                 self.scene.add_sprite("Coins_Silver", coin)
 
-            # 40% Chance: Cluster of Bronze Coins
-            elif roll <= 70:
-                # Place 3 coins in a row
+            # 2. Coins
+            elif roll <= limit_coin:
                 for i in range(3):
                     coin = arcade.Sprite(":resources:/images/items/coinBronze.png", COIN_SCALING)
                     coin.center_x = actual_x + (i * 40)
                     coin.bottom = ground_y + 10
                     self.scene.add_sprite("Coins_Bronze", coin)
 
-            # 10% Chance: Rare Red Gem (Floating High)
-            elif roll <= 80:
+            # 3. Bombs
+            elif roll <= limit_bomb:
+                bomb = arcade.Sprite(":resources:images/tiles/bomb.png", TILE_SCALING)
+                bomb.center_x = actual_x
+                bomb.bottom = ground_y
+                self.scene.add_sprite("Bombs", bomb)
+
+            # 4. Gems
+            elif roll <= limit_gem:
                 gem = arcade.Sprite(":resources:/images/items/gemRed.png", COIN_SCALING)
                 gem.center_x = actual_x
-                gem.bottom = ground_y + 250 # High jump!
+                gem.bottom = ground_y + 250
                 self.scene.add_sprite("Gems", gem)
 
-        # --- SPECIAL: Always Place Checkpoint Key ---
-        # Place it roughly in the middle of the level
-        mid_map = self.map_width / 2
-        mid_ground = self.get_ground_y(mid_map)
-        if mid_ground > 0:
-            key = arcade.Sprite(":resources:/images/items/keyBlue.png", COIN_SCALING)
-            key.center_x = mid_map
-            key.bottom = mid_ground + 10
-            self.scene.add_sprite("Keys", key)
+            # 5. Checkpoints
+            elif roll <= limit_check:
+                key = arcade.Sprite(":resources:/images/items/keyBlue.png", COIN_SCALING)
+                key.center_x = actual_x
+                key.bottom = ground_y + 10
+                self.scene.add_sprite("Keys", key)
 
     def setup(self):
-        # -- MAP LOADING --
-        layer_options = {
-            "Platforms": {"use_spatial_hash": True},
-        }
+        lvl_mult = self.LEVEL - 1
 
-        # Try loading the map.
+        self.curr_crate = min(35, self.BASE_CRATE + (3 * lvl_mult))
+        self.curr_coin = min(20, self.BASE_COIN + (1 * lvl_mult))
+        self.curr_bomb = min(40, self.BASE_BOMB + (5 * lvl_mult))
+        self.curr_gem = min(10, self.BASE_GEM + (1 * lvl_mult))
+        self.curr_check = min(15, self.BASE_CHECK + (1 * lvl_mult))
 
+        layer_options = {"Platforms": {"use_spatial_hash": True}}
+        map_name = f":resources:tiled_maps/level_{self.level}.json"
 
         try:
-            map_name = f":resources:tiled_maps/map2_level_{self.level}.json"
             self.tile_map = arcade.load_tilemap(map_name, TILE_SCALING, layer_options)
         except FileNotFoundError:
-            print(f"Map {map_name} not found, resetting to level 1")
+            print(f"Map {map_name} not found, resetting local map to level 1")
             self.level = 1
             map_name = f":resources:tiled_maps/level_{self.level}.json"
             self.tile_map = arcade.load_tilemap(map_name, TILE_SCALING, layer_options)
@@ -288,18 +303,15 @@ class GameView(arcade.View):
         self.map_width = (self.tile_map.width * self.tile_map.tile_width) * self.tile_map.scaling
         self.map_height = (self.tile_map.height * self.tile_map.tile_height) * self.tile_map.scaling
 
-        # Create SpriteLists
         self.scene.add_sprite_list("Coins_Bronze")
         self.scene.add_sprite_list("Coins_Silver")
         self.scene.add_sprite_list("Gems")
         self.scene.add_sprite_list("Keys")
         self.scene.add_sprite_list("Obstacles")
+        self.scene.add_sprite_list("Bombs")
 
-        # --- RUN DYNAMIC PLACEMENT ---
-        # This will fill the level with items regardless of map size
         self.place_dynamic_objects()
 
-        # --- PLAYER SETUP ---
         if "Foreground" in self.scene:
             self.scene.add_sprite_list_after("Player", "Foreground")
         else:
@@ -310,7 +322,6 @@ class GameView(arcade.View):
         self.player_sprite.center_y = self.checkpoint_y
         self.scene.add_sprite("Player", self.player_sprite)
 
-        # Create Physics Engine
         wall_layers = [self.scene["Obstacles"]]
         if "Platforms" in self.scene:
             wall_layers.append(self.scene["Platforms"])
@@ -328,7 +339,9 @@ class GameView(arcade.View):
         if self.reset_score: self.score = 0
         self.reset_score = True
 
-        self.score_text = arcade.Text(f"Score: {self.score}", x=10, y=10, font_size=30, font_name=RETRO_FONT, color=COLOR_TEXT_MAIN)
+        self.score_text = arcade.Text(f"Score: {self.score}", x=100, y=10, font_size=30, font_name=RETRO_FONT, color=COLOR_TEXT_MAIN)
+        self.level_text = arcade.Text(f"Level: {self.LEVEL}", x=10, y=10, font_size=30, font_name=RETRO_FONT, color=COLOR_TEXT_MAIN)
+        self.lives_text = arcade.Text(f"x {self.lives}", x=50, y=WINDOW_HEIGHT - 40, font_size=30, font_name=RETRO_FONT, color=COLOR_TEXT_MAIN)
 
     def on_show_view(self):
         self.manager.enable()
@@ -341,21 +354,43 @@ class GameView(arcade.View):
         self.clear()
         self.camera.use()
         self.scene.draw()
+
         self.gui_camera.use()
         self.manager.draw()
         self.score_text.draw()
+        self.level_text.draw()
+
+        # FIX: Draw the sprite LIST, not the individual sprite
+        self.ui_list.draw()
+
+        self.lives_text.draw()
 
     def respawn_player(self):
-        self.player_sprite.change_x = 0
-        self.player_sprite.change_y = 0
-        self.player_sprite.center_x = self.checkpoint_x
-        self.player_sprite.center_y = self.checkpoint_y
+        self.lives -= 1
+        self.lives_text.text = f"x {self.lives}"
         arcade.play_sound(self.gameover_sound)
-        self.camera.position = (self.checkpoint_x, self.checkpoint_y)
+
+        if self.lives > 0:
+            self.player_sprite.change_x = 0
+            self.player_sprite.change_y = 0
+            self.player_sprite.center_x = self.checkpoint_x
+            self.player_sprite.center_y = self.checkpoint_y
+            self.camera.position = (self.checkpoint_x, self.checkpoint_y)
+        else:
+            self.LEVEL = 1
+            self.level = 1
+            self.score = 0
+            self.lives = 3
+            self.checkpoint_x = 128
+            self.checkpoint_y = 128
+            self.setup()
 
     def on_update(self, delta_time):
         if self.physics_engine:
             self.physics_engine.update()
+
+        if self.player_sprite.left < 0:
+            self.player_sprite.left = 0
 
         if self.player_sprite.change_x > 0: self.facing_right = True
         elif self.player_sprite.change_x < 0: self.facing_right = False
@@ -373,7 +408,15 @@ class GameView(arcade.View):
             self.walk_index = 0
             self.player_sprite.texture = self.player_texture_idle
 
-        # --- ROBUST COLLISION CHECKS ---
+        # Collisions
+        if "Bombs" in self.scene:
+            if arcade.check_for_collision_with_list(self.player_sprite, self.scene["Bombs"]):
+                self.respawn_player()
+
+        if "Don't Touch" in self.scene:
+            if arcade.check_for_collision_with_list(self.player_sprite, self.scene["Don't Touch"]):
+                self.respawn_player()
+
         if "Coins" in self.scene:
             gold_hit = arcade.check_for_collision_with_list(self.player_sprite, self.scene["Coins"])
             for coin in gold_hit:
@@ -406,19 +449,15 @@ class GameView(arcade.View):
             self.checkpoint_x = key.center_x
             self.checkpoint_y = key.center_y
 
-        self.score_text.text = f"Score: {self.score}"
-
-        # Robust "Don't Touch" check
-        if "Don't Touch" in self.scene:
-            if arcade.check_for_collision_with_list(self.player_sprite, self.scene["Don't Touch"]):
-                self.respawn_player()
+        self.score_text.text = f"Score: {self.score} | Level: {self.LEVEL}"
 
         if self.player_sprite.top < 0:
             self.respawn_player()
 
-        # Level End Logic
+        # Level End
         if self.player_sprite.center_x >= self.map_width:
             self.level += 1
+            self.LEVEL += 1
             self.reset_score = False
             self.checkpoint_x = 128
             self.checkpoint_y = 128
