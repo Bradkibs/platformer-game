@@ -1,5 +1,5 @@
 """
-Platformer Game with Views, animation and camera clamping.
+Platformer Game with Views, animation, camera clamping, and SMOOTH CAMERA FOLLOW.
 """
 import arcade
 import arcade.gui
@@ -13,6 +13,9 @@ TILE_SCALING = 0.5
 PLAYER_MOVEMENT_SPEED = 5
 GRAVITY = 1
 PLAYER_JUMP_SPEED = 20
+
+# How fast the camera follows the player (0.1 = smooth, 1.0 = instant)
+CAMERA_SPEED = 0.1
 
 
 class SubMenu(arcade.gui.UIMouseFilterMixin, arcade.gui.UIAnchorLayout):
@@ -174,6 +177,9 @@ class GameView(arcade.View):
         self.camera = arcade.Camera2D()
         self.gui_camera = arcade.Camera2D()
 
+        # Center camera on player immediately so we don't "drift" at the start
+        self.camera.position = (self.player_sprite.center_x, self.player_sprite.center_y)
+
         if self.reset_score: self.score = 0
         self.reset_score = True
         self.score_text = arcade.Text(f"Score: {self.score}", x=10, y=10, font_size=18)
@@ -234,30 +240,36 @@ class GameView(arcade.View):
             self.reset_score = False
             self.setup()
 
-        # --- CAMERA CLIPPING LOGIC ---
-        # 1. Get the screen dimensions relative to the current camera zoom
+        # --- CAMERA LOGIC ---
+
+        # 1. Determine the Target (Where we WANT to go)
         screen_center_x = self.window.width / 2
         screen_center_y = self.window.height / 2
 
-        # 2. Determine where the camera WANTS to be (the player)
         target_x = self.player_sprite.center_x
         target_y = self.player_sprite.center_y
 
-        # 3. Clamp X: Ensure camera doesn't show past the Left (0) or Right (map_width) edges
-        # We clamp the CENTER point. The center must be at least 'half a screen' away from the edge.
+        # 2. Clamp the Target (Respect Map Boundaries)
         if target_x < screen_center_x:
             target_x = screen_center_x
         elif target_x > self.map_width - screen_center_x:
             target_x = self.map_width - screen_center_x
 
-        # 4. Clamp Y: Same for Top and Bottom
         if target_y < screen_center_y:
             target_y = screen_center_y
         elif target_y > self.map_height - screen_center_y:
             target_y = self.map_height - screen_center_y
 
-        # 5. Set the camera position to the clamped coordinates
-        self.camera.position = (target_x, target_y)
+        # 3. Smoothly Move "Current" Camera towards "Target"
+        # Get current camera position
+        current_x, current_y = self.camera.position
+
+        # Calculate the smooth step using Lerp (Linear Interpolation)
+        smooth_x = current_x + (target_x - current_x) * CAMERA_SPEED
+        smooth_y = current_y + (target_y - current_y) * CAMERA_SPEED
+
+        # 4. Apply the new position
+        self.camera.position = (smooth_x, smooth_y)
 
     def on_key_press(self, key, modifiers):
         if key in [arcade.key.UP, arcade.key.W] and self.physics_engine.can_jump():
