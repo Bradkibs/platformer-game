@@ -39,6 +39,11 @@ class GameView(arcade.Window):
         self.player_texture_fall_left = None
         self.player_texture_idle = None
 
+        #walking animation sequence
+        self.walk_textures_right = []
+        self.walk_textures_left = []
+        self.walk_index = 0
+
         # Separate variable that holds the player sprite
         self.player_sprite = None
 
@@ -95,16 +100,18 @@ class GameView(arcade.Window):
         # Create our Scene Based on the TileMap
         self.scene = arcade.Scene.from_tilemap(self.tile_map)
         # right movement sprites
-        self.player_texture_walk_right = arcade.load_texture(
-            ":resources:/images/animated_characters/female_adventurer/femaleAdventurer_walk0.png"
-        )
+        for i in range(8):
+            self.player_texture_walk_right = arcade.load_texture(
+            f":resources:/images/animated_characters/male_person/malePerson_walk{i}.png")
+            self.walk_textures_right.append(self.player_texture_walk_right)
+            self.walk_textures_left.append(self.player_texture_walk_right.flip_left_right())
         self.player_texture_jump_right = arcade.load_texture(
-            ":resources:images/animated_characters/female_adventurer/femaleAdventurer_jump.png")
+            ":resources:images/animated_characters/male_person/malePerson_jump.png")
         self.player_texture_fall_right = arcade.load_texture(
-            ":resources:images/animated_characters/female_adventurer/femaleAdventurer_fall.png")
+            ":resources:images/animated_characters/male_person/malePerson_fall.png")
 
         # idle sprite remains the same
-        self.player_texture_idle = arcade.load_texture(":resources:/images/animated_characters/female_adventurer/femaleAdventurer_idle.png")
+        self.player_texture_idle = arcade.load_texture(":resources:/images/animated_characters/male_person/malePerson_idle.png")
 
 
 
@@ -213,13 +220,21 @@ class GameView(arcade.Window):
 
         # CASE B: Walking (Grounded and moving)
         elif abs(self.player_sprite.change_x) > 0:
+            # 1. Update the animation frame
+            # We use a smaller increment (like 0.2) to slow down the animation speed
+            self.walk_index += 0.2
+            if self.walk_index >= len(self.walk_textures_right):
+                self.walk_index = 0
+
+            # 2. Assign the texture
             if self.facing_right:
-                self.player_sprite.texture = self.player_texture_walk_right
+                self.player_sprite.texture = self.walk_textures_right[int(self.walk_index)]
             else:
-                self.player_sprite.texture = self.player_texture_walk_left
+                self.player_sprite.texture = self.walk_textures_left[int(self.walk_index)]
 
         # CASE C: Idle (Grounded and still)
         else:
+            self.walk_index = 0
             # If you want directional idle:
             if self.facing_right:
                 self.player_sprite.texture = self.player_texture_idle
