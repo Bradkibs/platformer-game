@@ -1,8 +1,8 @@
 """
-Platformer Game: Retro Theme, Checkpoints, Obstacles, Multiple Currencies.
+Platformer Game: Dynamic Object Placement for All Levels.
 FIXES:
-1. Level transition now resets spawn point correctly.
-2. Boxes now stack physically on top of each other.
+1. Replaces static coordinates (x=800) with a loop that scans the whole map.
+2. Ensures obstacles and items appear in Level 2, 3, etc.
 """
 import arcade
 import arcade.gui
@@ -193,15 +193,94 @@ class GameView(arcade.View):
                         ground_y = tile.top
         return ground_y
 
-    def setup(self):
-        layer_options = {"Platforms": {"use_spatial_hash": True}}
-        # Load map (fallback to level 1 if file missing for higher levels)
-        try:
-            self.tile_map = arcade.load_tilemap(f":resources:tiled_maps/map2_level_{self.level}.json", TILE_SCALING, layer_options)
-        except Exception:
+    def place_dynamic_objects(self):
+        """
+        Scans the entire level map and places objects (Crates, Coins, Gems)
+        dynamically based on available ground, rather than fixed coordinates.
+        """
+        # Start scanning after the start area (300px) and stop before the end (200px)
+        # We step every 300 pixels to spread things out.
+        scan_step = 300
 
+        for x_coord in range(400, int(self.map_width - 200), scan_step):
+
+            # Add some randomness to the step so it doesn't look like a grid
+            actual_x = x_coord + random.randint(-50, 50)
+
+            # Find the ground height at this spot
+            ground_y = self.get_ground_y(actual_x)
+
+            # If we found a pit (ground is too low), skip this spot
+            if ground_y < 0:
+                continue
+
+            # --- DECISION: WHAT TO PLACE HERE? ---
+            roll = random.randint(1, 100)
+
+            # 30% Chance: Crate Stack with Silver Coins
+            if roll <= 30:
+                previous_box = None
+                # Create stack of 1 to 3 crates
+                stack_height = random.randint(1, 3)
+
+                for i in range(stack_height):
+                    crate = arcade.Sprite(":resources:images/tiles/boxCrate_double.png", TILE_SCALING)
+                    crate.center_x = actual_x
+                    if i == 0:
+                        crate.bottom = ground_y
+                    else:
+                        crate.bottom = previous_box.top
+                    self.scene.add_sprite("Obstacles", crate)
+                    previous_box = crate
+
+                # Place silver coin on top
+                coin = arcade.Sprite(":resources:/images/items/coinSilver.png", COIN_SCALING)
+                coin.center_x = actual_x
+                coin.bottom = previous_box.top + 10
+                self.scene.add_sprite("Coins_Silver", coin)
+
+            # 40% Chance: Cluster of Bronze Coins
+            elif roll <= 70:
+                # Place 3 coins in a row
+                for i in range(3):
+                    coin = arcade.Sprite(":resources:/images/items/coinBronze.png", COIN_SCALING)
+                    coin.center_x = actual_x + (i * 40)
+                    coin.bottom = ground_y + 10
+                    self.scene.add_sprite("Coins_Bronze", coin)
+
+            # 10% Chance: Rare Red Gem (Floating High)
+            elif roll <= 80:
+                gem = arcade.Sprite(":resources:/images/items/gemRed.png", COIN_SCALING)
+                gem.center_x = actual_x
+                gem.bottom = ground_y + 250 # High jump!
+                self.scene.add_sprite("Gems", gem)
+
+        # --- SPECIAL: Always Place Checkpoint Key ---
+        # Place it roughly in the middle of the level
+        mid_map = self.map_width / 2
+        mid_ground = self.get_ground_y(mid_map)
+        if mid_ground > 0:
+            key = arcade.Sprite(":resources:/images/items/keyBlue.png", COIN_SCALING)
+            key.center_x = mid_map
+            key.bottom = mid_ground + 10
+            self.scene.add_sprite("Keys", key)
+
+    def setup(self):
+        # -- MAP LOADING --
+        layer_options = {
+            "Platforms": {"use_spatial_hash": True},
+        }
+
+        # Try loading the map.
+        map_name = f":resources:tiled_maps/level_{self.level}.json"
+
+        try:
+            self.tile_map = arcade.load_tilemap(map_name, TILE_SCALING, layer_options)
+        except FileNotFoundError:
+            print(f"Map {map_name} not found, resetting to level 1")
             self.level = 1
-            self.tile_map = arcade.load_tilemap(f":resources:tiled_maps/test_map_{self.level}.json", TILE_SCALING, layer_options)
+            map_name = f":resources:tiled_maps/map2_level_{self.level}.json"
+            self.tile_map = arcade.load_tilemap(map_name, TILE_SCALING, layer_options)
 
         self.scene = arcade.Scene.from_tilemap(self.tile_map)
 
@@ -215,81 +294,29 @@ class GameView(arcade.View):
         self.scene.add_sprite_list("Keys")
         self.scene.add_sprite_list("Obstacles")
 
-        # --- SMART PLACEMENT LOGIC ---
-
-        # 1. Place Boxes/Crates (Stacked)
-        crate_x = 800
-        ground_height = self.get_ground_y(crate_x)
-
-        # Keep track of the previous box to stack on top of it
-        previous_box = None
-
-        if ground_height > -50: # Only place if we found ground
-            for i in range(3):
-                crate = arcade.Sprite(":resources:images/tiles/boxCrate_double.png", TILE_SCALING)
-                crate.center_x = crate_x + (i * 2) # Slight X stagger for retro look
-
-                if i == 0:
-                    # First crate sits on ground
-                    crate.bottom = ground_height
-                else:
-                    # Next crates sit exactly on top of the previous one
-                    crate.bottom = previous_box.top
-
-                self.scene.add_sprite("Obstacles", crate)
-                previous_box = crate
-
-            # 2. Place Silver Coins (On top of the box stack)
-            if previous_box:
-                top_of_stack = previous_box.top
-                for i in range(3):
-                    coin = arcade.Sprite(":resources:/images/items/coinSilver.png", COIN_SCALING)
-                    coin.center_x = crate_x
-                    coin.bottom = top_of_stack + 10 + (i * 50)
-                    self.scene.add_sprite("Coins_Silver", coin)
-
-        # 3. Place Bronze Coins (Scattered)
-        for i in range(10):
-            random_x = random.randint(300, int(self.map_width - 200))
-            y_pos = self.get_ground_y(random_x)
-            if y_pos > 0:
-                coin = arcade.Sprite(":resources:/images/items/coinBronze.png", COIN_SCALING)
-                coin.center_x = random_x
-                coin.bottom = y_pos + 5
-                self.scene.add_sprite("Coins_Bronze", coin)
-
-        # 4. Place Gems (High up)
-        gem_x = 1200
-        ground_at_gem = self.get_ground_y(gem_x)
-        if ground_at_gem > 0:
-            gem = arcade.Sprite(":resources:/images/items/gemRed.png", COIN_SCALING)
-            gem.center_x = gem_x
-            gem.bottom = ground_at_gem + 250
-            self.scene.add_sprite("Gems", gem)
-
-        # 5. Place Checkpoint Key (On ground)
-        key_x = 1000
-        ground_at_key = self.get_ground_y(key_x)
-        if ground_at_key > 0:
-            key = arcade.Sprite(":resources:/images/items/keyBlue.png", COIN_SCALING)
-            key.center_x = key_x
-            key.bottom = ground_at_key + 10
-            self.scene.add_sprite("Keys", key)
+        # --- RUN DYNAMIC PLACEMENT ---
+        # This will fill the level with items regardless of map size
+        self.place_dynamic_objects()
 
         # --- PLAYER SETUP ---
+        if "Foreground" in self.scene:
+            self.scene.add_sprite_list_after("Player", "Foreground")
+        else:
+            self.scene.add_sprite_list("Player")
 
-        self.scene.add_sprite_list_after("Player", "Foreground")
         self.player_sprite = arcade.Sprite(self.player_texture_idle)
-
-        # Use checkpoint if set, otherwise start at 128, 128
         self.player_sprite.center_x = self.checkpoint_x
         self.player_sprite.center_y = self.checkpoint_y
-
         self.scene.add_sprite("Player", self.player_sprite)
+
+        # Create Physics Engine
+        wall_layers = [self.scene["Obstacles"]]
+        if "Platforms" in self.scene:
+            wall_layers.append(self.scene["Platforms"])
 
         self.physics_engine = arcade.PhysicsEnginePlatformer(
             self.player_sprite,
-            walls=[self.scene["Platforms"], self.scene["Obstacles"]],
+            walls=wall_layers,
             gravity_constant=GRAVITY
         )
 
@@ -345,12 +372,13 @@ class GameView(arcade.View):
             self.walk_index = 0
             self.player_sprite.texture = self.player_texture_idle
 
-        # Collisions
-        gold_hit = arcade.check_for_collision_with_list(self.player_sprite, self.scene["Coins"])
-        for coin in gold_hit:
-            coin.remove_from_sprite_lists()
-            arcade.play_sound(self.collect_coin_sound)
-            self.score += SCORE_GOLD
+        # --- ROBUST COLLISION CHECKS ---
+        if "Coins" in self.scene:
+            gold_hit = arcade.check_for_collision_with_list(self.player_sprite, self.scene["Coins"])
+            for coin in gold_hit:
+                coin.remove_from_sprite_lists()
+                arcade.play_sound(self.collect_coin_sound)
+                self.score += SCORE_GOLD
 
         bronze_hit = arcade.check_for_collision_with_list(self.player_sprite, self.scene["Coins_Bronze"])
         for coin in bronze_hit:
@@ -379,8 +407,10 @@ class GameView(arcade.View):
 
         self.score_text.text = f"Score: {self.score}"
 
-        if arcade.check_for_collision_with_list(self.player_sprite, self.scene["Don't Touch"]):
-            self.respawn_player()
+        # Robust "Don't Touch" check
+        if "Don't Touch" in self.scene:
+            if arcade.check_for_collision_with_list(self.player_sprite, self.scene["Don't Touch"]):
+                self.respawn_player()
 
         if self.player_sprite.top < 0:
             self.respawn_player()
@@ -389,11 +419,8 @@ class GameView(arcade.View):
         if self.player_sprite.center_x >= self.map_width:
             self.level += 1
             self.reset_score = False
-
-            # --- FIX: RESET CHECKPOINT FOR NEW LEVEL ---
             self.checkpoint_x = 128
             self.checkpoint_y = 128
-
             self.setup()
 
         # Camera
