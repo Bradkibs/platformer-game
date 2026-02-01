@@ -1,5 +1,3 @@
----
-
 # Adventures of the Platformer Game
 
 **Author:** Bradley Kibwana
