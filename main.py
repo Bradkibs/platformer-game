@@ -479,6 +479,7 @@ class GameView(arcade.View):
             gem.remove_from_sprite_lists()
             arcade.play_sound(self.collect_gem_sound)
             self.score += SCORE_GEM
+            self.lives += 1
 
         key_hit = arcade.check_for_collision_with_list(self.player_sprite, self.scene["Keys"])
         for key in key_hit:
