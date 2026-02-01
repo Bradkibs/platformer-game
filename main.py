@@ -1,8 +1,6 @@
 """
-Platformer Game: Explosive Update (Arcade 3.0 Compatible).
-FIXES:
-1. Fixed 'Sprite has no attribute draw' by using a SpriteList for UI.
-2. Maintained dynamic difficulty and lives system.
+Platfrormer game in python using arcade library
+Author: Bradley Kibwana
 """
 import arcade
 import arcade.gui
@@ -119,6 +117,60 @@ class MenuView(arcade.View):
         self.manager.draw()
 
 
+class GameOverView(arcade.View):
+    """View to show when the player loses all lives."""
+    def __init__(self):
+        super().__init__()
+        self.manager = arcade.gui.UIManager()
+
+        # Create layout
+        self.grid = arcade.gui.UIGridLayout(column_count=1, row_count=3, vertical_spacing=20)
+
+        # Title Label
+        title_label = arcade.gui.UILabel(
+            text="GAME OVER",
+            font_name=RETRO_FONT,
+            font_size=60,
+            text_color=COLOR_TEXT_MAIN,
+            align="center"
+        )
+
+        # Buttons
+        restart_btn = arcade.gui.UIFlatButton(text="Try Again", width=250, style=RETRO_BUTTON_STYLE)
+        exit_btn = arcade.gui.UIFlatButton(text="Exit", width=250, style=RETRO_BUTTON_STYLE)
+
+        # Add to grid
+        self.grid.add(title_label, column=0, row=0)
+        self.grid.add(restart_btn, column=0, row=1)
+        self.grid.add(exit_btn, column=0, row=2)
+
+        # Anchor logic
+        self.anchor = self.manager.add(arcade.gui.UIAnchorLayout())
+        self.anchor.add(anchor_x="center_x", anchor_y="center_y", child=self.grid)
+
+        # Button Events
+        @restart_btn.event("on_click")
+        def on_restart(event):
+            game_view = GameView()
+            game_view.setup()
+            self.window.show_view(game_view)
+
+        @exit_btn.event("on_click")
+        def on_exit(event):
+            arcade.exit()
+
+    def on_show_view(self):
+        self.manager.enable()
+        arcade.set_background_color(COLOR_BG_MENU)
+
+    def on_hide_view(self):
+        self.manager.disable()
+
+    def on_draw(self):
+        self.clear()
+        self.manager.draw()
+
+
 class GameView(arcade.View):
     def __init__(self):
         super().__init__()
@@ -154,16 +206,13 @@ class GameView(arcade.View):
         # --- NEW: Lives System ---
         self.lives = 3
 
-        # FIX: Created a dedicated SpriteList for UI elements
+        # UI Sprite List
         self.ui_list = arcade.SpriteList()
-
         self.heart_sprite = arcade.Sprite(":resources:images/items/gemRed.png")
         self.heart_sprite.width = 30
         self.heart_sprite.height = 30
         self.heart_sprite.center_x = 30
         self.heart_sprite.center_y = WINDOW_HEIGHT - 30
-
-        # Add the sprite to the list
         self.ui_list.append(self.heart_sprite)
 
         self.checkpoint_x = 128
@@ -230,7 +279,6 @@ class GameView(arcade.View):
 
             roll = random.randint(1, 100)
 
-            # 1. Crates
             if roll <= limit_crate:
                 previous_box = None
                 stack_height = random.randint(1, 3)
@@ -249,7 +297,6 @@ class GameView(arcade.View):
                 coin.bottom = previous_box.top + 10
                 self.scene.add_sprite("Coins_Silver", coin)
 
-            # 2. Coins
             elif roll <= limit_coin:
                 for i in range(3):
                     coin = arcade.Sprite(":resources:/images/items/coinBronze.png", COIN_SCALING)
@@ -257,21 +304,18 @@ class GameView(arcade.View):
                     coin.bottom = ground_y + 10
                     self.scene.add_sprite("Coins_Bronze", coin)
 
-            # 3. Bombs
             elif roll <= limit_bomb:
                 bomb = arcade.Sprite(":resources:images/tiles/bomb.png", TILE_SCALING)
                 bomb.center_x = actual_x
                 bomb.bottom = ground_y
                 self.scene.add_sprite("Bombs", bomb)
 
-            # 4. Gems
             elif roll <= limit_gem:
                 gem = arcade.Sprite(":resources:/images/items/gemRed.png", COIN_SCALING)
                 gem.center_x = actual_x
                 gem.bottom = ground_y + 250
                 self.scene.add_sprite("Gems", gem)
 
-            # 5. Checkpoints
             elif roll <= limit_check:
                 key = arcade.Sprite(":resources:/images/items/keyBlue.png", COIN_SCALING)
                 key.center_x = actual_x
@@ -288,7 +332,7 @@ class GameView(arcade.View):
         self.curr_check = min(15, self.BASE_CHECK + (1 * lvl_mult))
 
         layer_options = {"Platforms": {"use_spatial_hash": True}}
-        map_name = f":resources:tiled_maps/level_{self.level}.json"
+        map_name = f":resources:tiled_maps/map2_level_{self.level}.json"
 
         try:
             self.tile_map = arcade.load_tilemap(map_name, TILE_SCALING, layer_options)
@@ -339,9 +383,9 @@ class GameView(arcade.View):
         if self.reset_score: self.score = 0
         self.reset_score = True
 
-        self.score_text = arcade.Text(f"Score: {self.score}", x=100, y=10, font_size=30, font_name=RETRO_FONT, color=COLOR_TEXT_MAIN)
+        self.score_text = arcade.Text(f"Score: {self.score}", x=130, y=10, font_size=30, font_name=RETRO_FONT, color=COLOR_TEXT_MAIN)
         self.level_text = arcade.Text(f"Level: {self.LEVEL}", x=10, y=10, font_size=30, font_name=RETRO_FONT, color=COLOR_TEXT_MAIN)
-        self.lives_text = arcade.Text(f"x {self.lives}", x=50, y=WINDOW_HEIGHT - 40, font_size=30, font_name=RETRO_FONT, color=COLOR_TEXT_MAIN)
+        self.lives_text = arcade.Text(f"x {self.lives}", x=50, y=WINDOW_HEIGHT - 40, font_size=50, font_name=RETRO_FONT, color=COLOR_TEXT_MAIN)
 
     def on_show_view(self):
         self.manager.enable()
@@ -360,9 +404,7 @@ class GameView(arcade.View):
         self.score_text.draw()
         self.level_text.draw()
 
-        # FIX: Draw the sprite LIST, not the individual sprite
         self.ui_list.draw()
-
         self.lives_text.draw()
 
     def respawn_player(self):
@@ -377,13 +419,9 @@ class GameView(arcade.View):
             self.player_sprite.center_y = self.checkpoint_y
             self.camera.position = (self.checkpoint_x, self.checkpoint_y)
         else:
-            self.LEVEL = 1
-            self.level = 1
-            self.score = 0
-            self.lives = 3
-            self.checkpoint_x = 128
-            self.checkpoint_y = 128
-            self.setup()
+            # SWITCH TO GAME OVER VIEW
+            game_over_view = GameOverView()
+            self.window.show_view(game_over_view)
 
     def on_update(self, delta_time):
         if self.physics_engine:
@@ -449,7 +487,7 @@ class GameView(arcade.View):
             self.checkpoint_x = key.center_x
             self.checkpoint_y = key.center_y
 
-        self.score_text.text = f"Score: {self.score} | Level: {self.LEVEL}"
+        self.score_text.text = f"Score: {self.score}"
 
         if self.player_sprite.top < 0:
             self.respawn_player()
