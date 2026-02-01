@@ -1,11 +1,11 @@
 """
-Platformer Game with Views, animation, camera clamping, and SMOOTH CAMERA FOLLOW.
+Platformer Game with Retro Warm Theme, Animation, and Smooth Camera.
 """
 import arcade
 import arcade.gui
 from typing import List
 
-# Constants
+# --- Constants & Configuration ---
 WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 720
 WINDOW_TITLE = "Adventure of the Platformer"
@@ -13,10 +13,59 @@ TILE_SCALING = 0.5
 PLAYER_MOVEMENT_SPEED = 5
 GRAVITY = 1
 PLAYER_JUMP_SPEED = 20
-
-# How fast the camera follows the player (0.1 = smooth, 1.0 = instant)
 CAMERA_SPEED = 0.1
 
+# --- Retro Theme Colors ---
+# A warm, cohesive palette: Wheat/Bisque backgrounds, Dark Brown text/borders.
+COLOR_BG_GAME = arcade.color.WHEAT
+COLOR_BG_MENU = arcade.color.BISQUE
+COLOR_TEXT_MAIN = arcade.color.SADDLE_BROWN
+COLOR_BTN_NORMAL = arcade.color.BURLYWOOD
+COLOR_BTN_HOVER = arcade.color.SANDY_BROWN
+COLOR_BTN_PRESS = arcade.color.SIENNA
+COLOR_BTN_TEXT = arcade.color.DARK_BROWN
+
+# Load a Retro Font from Arcade Resources
+# We load it globally so we can reference the font_name everywhere
+arcade.load_font(':resources:/fonts/ttf/Kenney/Kenney_Pixel.ttf')
+RETRO_FONT = "Kenney Pixel"
+
+# Define the Retro Button Style
+# This dictionary tells the UI buttons how to look in different states
+RETRO_BUTTON_STYLE = {
+    "normal": arcade.gui.UIFlatButton.UIStyle(
+        font_size=24,
+        font_name=RETRO_FONT,
+        font_color=COLOR_BTN_TEXT,
+        bg=COLOR_BTN_NORMAL,
+        border=COLOR_BTN_PRESS,
+        border_width=2,
+    ),
+    "hover": arcade.gui.UIFlatButton.UIStyle(
+        font_size=24,
+        font_name=RETRO_FONT,
+        font_color=COLOR_BTN_TEXT,
+        bg=COLOR_BTN_HOVER,
+        border=COLOR_BTN_TEXT,
+        border_width=2,
+    ),
+    "press": arcade.gui.UIFlatButton.UIStyle(
+        font_size=24,
+        font_name=RETRO_FONT,
+        font_color=arcade.color.WHITE,
+        bg=COLOR_BTN_PRESS,
+        border=COLOR_BTN_PRESS,
+        border_width=2,
+    ),
+    "disabled": arcade.gui.UIFlatButton.UIStyle(
+        font_size=24,
+        font_name=RETRO_FONT,
+        font_color=arcade.color.GRAY,
+        bg=arcade.color.LIGHT_GRAY,
+        border=arcade.color.GRAY,
+        border_width=2,
+    )
+}
 
 class SubMenu(arcade.gui.UIMouseFilterMixin, arcade.gui.UIAnchorLayout):
     """Acts like a fake view/window."""
@@ -24,19 +73,31 @@ class SubMenu(arcade.gui.UIMouseFilterMixin, arcade.gui.UIAnchorLayout):
     def __init__(self, title, input_text, toggle_label, dropdown_options, slider_label):
         super().__init__(size_hint=(1, 1))
 
+        # Setup frame which will act like the window.
         frame = self.add(arcade.gui.UIAnchorLayout(width=300, height=400, size_hint=None))
         frame.with_padding(all=20)
+
+        # Using the neutral 'grey_panel' which blends better with warm colors
+        # than the 'dark_blue_gray' one.
         frame.with_background(
             texture=arcade.gui.NinePatchTexture(
                 left=7, right=7, bottom=7, top=7,
-                texture=arcade.load_texture(":resources:gui_basic_assets/window/dark_blue_gray_panel.png"),
+                texture=arcade.load_texture(":resources:gui_basic_assets/window/grey_panel.png"),
             )
         )
 
-        back_button = arcade.gui.UIFlatButton(text="Back", width=250)
+        # Styled Back Button
+        back_button = arcade.gui.UIFlatButton(text="Back", width=250, style=RETRO_BUTTON_STYLE)
         back_button.on_click = self.on_click_back_button
 
-        title_label = arcade.gui.UILabel(text=title, align="center", font_size=20)
+        title_label = arcade.gui.UILabel(
+            text=title,
+            align="center",
+            font_size=30,
+            font_name=RETRO_FONT,
+            text_color=COLOR_TEXT_MAIN
+        )
+
         widget_layout = arcade.gui.UIBoxLayout(align="left", space_between=10)
         widget_layout.add(title_label)
         widget_layout.add(back_button)
@@ -57,12 +118,13 @@ class MenuView(arcade.View):
 
         self.grid = arcade.gui.UIGridLayout(column_count=2, row_count=3, horizontal_spacing=20, vertical_spacing=20)
 
-        resume_btn = arcade.gui.UIFlatButton(text="Resume", width=150)
-        start_new_game_btn = arcade.gui.UIFlatButton(text="Start New Game", width=150)
-        exit_btn = arcade.gui.UIFlatButton(text="Exit", width=320)
+        # Apply the RETRO_BUTTON_STYLE to all menu buttons
+        resume_btn = arcade.gui.UIFlatButton(text="Resume", width=200, style=RETRO_BUTTON_STYLE)
+        start_new_btn = arcade.gui.UIFlatButton(text="New Game", width=200, style=RETRO_BUTTON_STYLE)
+        exit_btn = arcade.gui.UIFlatButton(text="Exit", width=420, style=RETRO_BUTTON_STYLE)
 
         self.grid.add(resume_btn, column=0, row=0)
-        self.grid.add(start_new_game_btn, column=1, row=0)
+        self.grid.add(start_new_btn, column=1, row=0)
         self.grid.add(exit_btn, column=0, row=2, column_span=2)
 
         self.anchor = self.manager.add(arcade.gui.UIAnchorLayout())
@@ -72,7 +134,7 @@ class MenuView(arcade.View):
         def on_click_resume_button(event):
             self.window.show_view(self.main_view)
 
-        @start_new_game_btn.event("on_click")
+        @start_new_btn.event("on_click")
         def on_click_start_new_game_button(event):
             game_view = GameView()
             game_view.setup()
@@ -84,7 +146,8 @@ class MenuView(arcade.View):
 
     def on_show_view(self):
         self.manager.enable()
-        arcade.set_background_color(arcade.color.DARK_BLUE_GRAY)
+        # Set the warm retro background color
+        arcade.set_background_color(COLOR_BG_MENU)
 
     def on_hide_view(self):
         self.manager.disable()
@@ -101,8 +164,8 @@ class GameView(arcade.View):
         super().__init__()
         self.manager = arcade.gui.UIManager()
 
-        # UI Pause Button
-        pause_btn = arcade.gui.UIFlatButton(text="Pause Game", width=150)
+        # UI Pause Button with Retro Style
+        pause_btn = arcade.gui.UIFlatButton(text="Pause", width=120, style=RETRO_BUTTON_STYLE)
 
         @pause_btn.event("on_click")
         def on_click_pause(event):
@@ -110,7 +173,7 @@ class GameView(arcade.View):
             self.window.show_view(menu_view)
 
         self.anchor = self.manager.add(arcade.gui.UIAnchorLayout())
-        self.anchor.add(anchor_x="right", anchor_y="top", align_x=-10, align_y=-10, child=pause_btn)
+        self.anchor.add(anchor_x="right", anchor_y="top", align_x=-20, align_y=-20, child=pause_btn)
 
         # Game Variables
         self.player_sprite = None
@@ -120,11 +183,9 @@ class GameView(arcade.View):
         self.camera = None
         self.gui_camera = None
 
-        # Map Dimensions for Camera Clipping
         self.map_width = 0
         self.map_height = 0
 
-        # Animation
         self.walk_textures_right = []
         self.walk_textures_left = []
         self.walk_index = 0
@@ -144,7 +205,7 @@ class GameView(arcade.View):
         self.player_texture_jump_left = self.player_texture_jump_right.flip_left_right()
         self.player_texture_fall_left = self.player_texture_fall_right.flip_left_right()
 
-        # Load walk sequence efficiently
+        # Load walk sequence
         for i in range(8):
             tex = arcade.load_texture(f":resources:/images/animated_characters/male_person/malePerson_walk{i}.png")
             self.walk_textures_right.append(tex)
@@ -160,7 +221,7 @@ class GameView(arcade.View):
                                             layer_options)
         self.scene = arcade.Scene.from_tilemap(self.tile_map)
 
-        # 1. Calculate Map Boundaries (in pixels)
+        # Calculate Map Boundaries
         self.map_width = (self.tile_map.width * self.tile_map.tile_width) * self.tile_map.scaling
         self.map_height = (self.tile_map.height * self.tile_map.tile_height) * self.tile_map.scaling
 
@@ -173,20 +234,29 @@ class GameView(arcade.View):
             self.player_sprite, walls=self.scene["Platforms"], gravity_constant=GRAVITY
         )
 
-        # Initialize cameras without invalid attributes
         self.camera = arcade.Camera2D()
         self.gui_camera = arcade.Camera2D()
 
-        # Center camera on player immediately so we don't "drift" at the start
+        # Center camera immediately
         self.camera.position = (self.player_sprite.center_x, self.player_sprite.center_y)
 
         if self.reset_score: self.score = 0
         self.reset_score = True
-        self.score_text = arcade.Text(f"Score: {self.score}", x=10, y=10, font_size=18)
+
+        # Styled Score Text
+        self.score_text = arcade.Text(
+            f"Score: {self.score}",
+            x=10,
+            y=10,
+            font_size=30,
+            font_name=RETRO_FONT,
+            color=COLOR_TEXT_MAIN
+        )
 
     def on_show_view(self):
         self.manager.enable()
-        arcade.set_background_color(arcade.csscolor.CORNFLOWER_BLUE)
+        # Set warm background for the game level
+        arcade.set_background_color(COLOR_BG_GAME)
 
     def on_hide_view(self):
         self.manager.disable()
@@ -203,7 +273,7 @@ class GameView(arcade.View):
         if self.physics_engine:
             self.physics_engine.update()
 
-        # Handle Animation
+        # Animation
         if self.player_sprite.change_x > 0:
             self.facing_right = True
         elif self.player_sprite.change_x < 0:
@@ -240,16 +310,14 @@ class GameView(arcade.View):
             self.reset_score = False
             self.setup()
 
-        # --- CAMERA LOGIC ---
-
-        # 1. Determine the Target (Where we WANT to go)
+        # Camera Logic
         screen_center_x = self.window.width / 2
         screen_center_y = self.window.height / 2
 
         target_x = self.player_sprite.center_x
         target_y = self.player_sprite.center_y
 
-        # 2. Clamp the Target (Respect Map Boundaries)
+        # Clamp
         if target_x < screen_center_x:
             target_x = screen_center_x
         elif target_x > self.map_width - screen_center_x:
@@ -260,15 +328,11 @@ class GameView(arcade.View):
         elif target_y > self.map_height - screen_center_y:
             target_y = self.map_height - screen_center_y
 
-        # 3. Smoothly Move "Current" Camera towards "Target"
-        # Get current camera position
+        # Smooth Follow
         current_x, current_y = self.camera.position
-
-        # Calculate the smooth step using Lerp (Linear Interpolation)
         smooth_x = current_x + (target_x - current_x) * CAMERA_SPEED
         smooth_y = current_y + (target_y - current_y) * CAMERA_SPEED
 
-        # 4. Apply the new position
         self.camera.position = (smooth_x, smooth_y)
 
     def on_key_press(self, key, modifiers):
